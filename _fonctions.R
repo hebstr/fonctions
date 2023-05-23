@@ -5,13 +5,13 @@ opts_set <- \(suivi_an = 1, suivi_jr = suivi_an * 365,
               yes = "Yes", no = "No", na = "Missing data",
               int_sep = ":", out_sep = ";", ci_sep = ";",
               ci_lim = "[", ci_level = "95", ci_term = "%CI",
-              p_format = ~ style_pvalue(.x, digits = 3),
+              p_format = ~ style_pvalue(.x, digits = 3), p_seuil = 0.05,
               font_alpha = "Bahnschrift", font_num = "calibri",
               color_ref = "#999999", color_back_light = "white",
               color_back_dark = "#292929", color_front_light = "#e1f6ff",
               color_front_dark = "#0099CC", sep_gap = FALSE) {
 
-if (is_true(fdr)) output_suffix <- paste0(output_suffix, fdr_suffix)
+if (fdr) output_suffix <- paste0(output_suffix, fdr_suffix)
 
 lab <-
 list(lab = list(sex_m = sex_m, sex_f = sex_f,
@@ -43,14 +43,14 @@ list(color = list(ref = color_ref,
 
 opts <- tibble(suivi_an, suivi_jr, fdr, fdr_start, fdr_suffix, output_suffix)
 
-assign("opts", list(set = c(opts, p_format = p_format, lab, sep, ci, font, color)), envir = .GlobalEnv)
+assign("opts", list(set = c(opts, p_format = p_format, p_seuil = p_seuil, lab, sep, ci, font, color)), envir = .GlobalEnv)
 
 }
 
 #-------------------------------------------------------------------------------------------------------------
 
-opts_tab <- \(base, uv, mv, vargrp = NULL, surv, strata = NULL, abb, abb_fdr = NULL, note,
-              var_fdr = opts_vargrp$fdr, before = "sympt_type") {
+opts_tab <- \(base, uv, vargrp = NULL, surv, strata = NULL, abb, abb_suppl = NULL, note,
+              var_suppl = NULL, vargrp_suppl = NULL, before = NULL) {
   
     add_vec <- \(to, var, before) {
     
@@ -73,24 +73,23 @@ opts_tab <- \(base, uv, mv, vargrp = NULL, surv, strata = NULL, abb, abb_fdr = N
     }
   
 abb <- enexpr(abb)
-abb_fdr <- enexpr(abb_fdr)
+abb_suppl <- enexpr(abb_suppl)
 with_abb <- expr(with(opts_abb, !!abb))
-with_abb_fdr <- expr(with(opts_abb, c(!!abb_fdr, !!abb)))
+with_abb_suppl <- expr(with(opts_abb, c(!!abb_suppl, !!abb)))
 
 if (is_false(opts$set$fdr))
-list(input = list(base = base, uv = uv, mv = mv),
+list(input = list(base = base, uv = uv),
      vargrp = group(vargrp),
      model_obj = model_obj(surv, strata),
      abb = eval(with_abb),
      note = note)
 
 else
-list(input = (list(base = add_vec(to = base, var = var_fdr, before = before),
-                   uv = add_vec(to = uv, var = var_fdr, before = before),
-                   mv = add_vec(to = mv, var = var_fdr[c(1,2,4)], before = before))),
-     vargrp = group(vargrp, var_fdr),
+list(input = (list(base = add_vec(to = base, var = c(var_suppl, vargrp_suppl), before = before),
+                   uv = add_vec(to = uv, var = c(var_suppl, vargrp_suppl), before = before))),
+     vargrp = group(vargrp, vargrp_suppl),
      model_obj = model_obj(surv, strata),
-     abb = eval(with_abb_fdr),
+     abb = eval(with_abb_suppl),
      note = note)
   
 }
@@ -169,16 +168,16 @@ as_gt(x) %>%
 
 if(sum(grep("coef", names(x[[1]]))) >= 1)
 x %>%
-    tab_footnote(c(eval(opts$tab$note$strata), .opts_note_mv, opts$tab$note$p,
-                   str_abb(.ref, .estim, .estim_ajust, opts$abb$CI, opts$tab$abb))) %>%
-    tab_footnote(opts$tab$note$ajust,
-                 cells_column_labels(p.value_2))
+tab_footnote(c(eval(opts$tab$note$strata), .opts_note_mv, opts$tab$note$p,
+               str_abb(.ref, .estim, .estim_ajust, opts$abb$CI, opts$tab$abb))) %>%
+tab_footnote(opts$tab$note$ajust,
+             cells_column_labels(p.value_2))
 
 else
 x %>% 
-  tab_footnote(c(opts$tab$note$p, str_abb(.n, .SD, opts$tab$abb))) %>% 
-  tab_footnote(opts$tab$note$vargrp,
-               cells_body(columns = label, rows = variable %in% opts$tab$vargrp$labels))
+tab_footnote(c(opts$tab$note$p, str_abb(.n, .SD, opts$tab$abb))) %>% 
+tab_footnote(opts$tab$note$vargrp,
+             cells_body(columns = label, rows = variable %in% opts$tab$vargrp$labels))
 
 }
 
@@ -251,9 +250,6 @@ y <- substitute(x)
 assign_tab <- \(name, ext, obj)
 assign(paste0(name, ext), obj, envir = .GlobalEnv)
 
-if (class %in% c("tbl_uvregression", "tbl_regression", "tbl_merge"))
-    y <- paste0(y, ".gts")
-
 if (class != "gt_tbl") {
   
     body_style <- list(assign_tab(y, "_body", x$table_body),
@@ -277,7 +273,7 @@ if (class != "gt_tbl") {
 
 binr <- \(x, var, condition, auto_bin = FALSE) {
   
-if (is_true(auto_bin))
+if (auto_bin)
 mutate(x, {{ var }} := ifelse(if_any({{ condition }}, ~ . == opts$set$lab$yes), opts$set$lab$yes, opts$set$lab$no))
 
 else
@@ -313,7 +309,11 @@ mutate(x, across(c(estimate, contains("conf")), ~ format(round(. * multi, 2), ns
 
 tab_format <- \(x, hide_n = TRUE) {
 
-if (class(x)[1] %in% c("tbl_uvregression", "tbl_regression")) {
+x <-
+x %>% modify_header(label ~ "**Characteristics**", p.value ~ "**p**") %>%
+      bold_p(t = opts$set$p_seuil)
+  
+if (str_detect(class(x)[1], "reg")) {
 
     x <-  
     x %>% modify_table_body(~ .x %>%
@@ -361,19 +361,16 @@ if (class(x)[1] %in% c("tbl_uvregression", "tbl_regression")) {
         
     }
 
-x <-
-x %>% modify_header(label ~ "**Characteristic**", p.value ~ "**p**") %>%
-      modify_footnote(everything() ~ NA, abbreviation = TRUE) %>%
-      bold_p(t = 0.05)
+x <- x %>% modify_footnote(everything() ~ NA, abbreviation = TRUE)
   
 } else {
   x <-
-  x %>% modify_table_body(~ .x %>%
+  x %>% add_overall() %>%
+        modify_table_body(~ .x %>%
           mutate(across(contains("stat_"), ~ ifelse(str_starts(., "0"), "—", .)))) %>%
-        modify_header(c(stat_1, stat_2) ~ "**{level}<br>(n={n}, {style_percent(p)}%)**",
-                      p.value ~ "**p**") %>%
-        modify_footnote(everything() ~ NA) %>%
-        bold_p(t = 0.05)
+        modify_header(stat_0 ~ "**Total<br>(n={N})**",
+                      c(stat_1, stat_2) ~ "**{level}<br>(n={n}, {style_percent(p)}%)**") %>%
+        modify_footnote(everything() ~ NA)
   
   assign(".n", abbr(n ~ "number of events"), envir = .GlobalEnv)
   assign(".SD", abbr(SD ~ "standard deviation"), envir = .GlobalEnv)
