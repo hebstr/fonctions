@@ -1,3 +1,7 @@
+library(tidyverse)
+
+#-------------------------------------------------------------------------------------------------------------
+
 opts_set <- \(suivi_an = 1, suivi_jr = suivi_an * 365,
               fdr = FALSE, fdr_start = 2014,
               fdr_suffix = "_fdr", output_suffix = "",
@@ -101,7 +105,7 @@ abbr <- \(...) {
 e <- env("~" = \(x, y) paste0(enexpr(x), opts$set$sep$int, y))
 
 abb <-
-  list(...) %>%
+list(...) %>%
   map(~ eval(enexpr(.), e)) %>%
   setNames(str_extract(., "[:alnum:]+(?=)"))
 
@@ -418,3 +422,15 @@ if (str_detect(class(x)[1], "tbl")) {
     }
 
 }}
+
+#---------------------------------------------------------------------------------------------------------------
+
+db_extract <- \(con = ".con", db, sample = "SAMPLE(1e-03)") {
+    
+dbReadTable(eval(sym(con)), paste(db, sample)) |>
+  tibble() |>
+  rename_with(~ str_to_lower(.)) |>
+  modify(~ str_to_lower(.))
+  
+}
+
