@@ -1,4 +1,17 @@
 library(tidyverse)
+library(rlang)
+library(glue)
+library(gt)
+library(gtsummary)
+library(broom.helpers)
+library(ggpubr)
+library(gtable)
+library(ggtext)
+library(scales)
+library(survival)
+library(ggsurvfit)
+library(tidycmprsk)
+library(webshot)
 
 #-------------------------------------------------------------------------------------------------------------
 
