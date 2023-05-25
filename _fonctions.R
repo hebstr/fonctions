@@ -1,4 +1,7 @@
 library(tidyverse)
+library(magrittr)
+library(dbplyr)
+library(lubridate)
 library(rlang)
 library(glue)
 library(gt)
@@ -430,12 +433,23 @@ if (str_detect(class(x)[1], "tbl")) {
 
 #---------------------------------------------------------------------------------------------------------------
 
-db_extract <- \(con = ".con", db, sample = "SAMPLE(1e-03)") {
-    
-dbReadTable(eval(sym(con)), paste(db, sample)) |>
-  tibble() |>
-  rename_with(~ str_to_lower(.)) |>
-  modify(~ str_to_lower(.))
-  
-}
+to_tbl <- \(x, db = TRUE, con = ".con", head = 1000) {
 
+if (db) {
+  
+    query <- paste(x, paste("fetch first", head, "rows only"))
+      
+    tbl(eval(sym(con)), sql(paste("select * from", query))) |>
+      rename_with(~ str_to_lower(.)) |>
+      mutate(across(everything(), ~ str_to_lower(.))) |> 
+      collect()
+    
+} else
+  
+  read.csv(x) |>
+    tibble() |>
+    rename_with(~ str_to_lower(.)) |>
+    mutate(across(everything(), ~ str_to_lower(.)))
+
+}
+  
