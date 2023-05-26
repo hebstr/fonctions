@@ -424,13 +424,13 @@ if (str_detect(class(x)[1], "tbl")) {
 
 #---------------------------------------------------------------------------------------------------------------
 
-to_tbl <- \(x, db = TRUE, con = ".con", head = 1000) {
+to_tbl <- \(x, db = TRUE, con = ".con", head = NULL) {
 
 if (db) {
   
-    query <- paste(x, paste("fetch first", head, "rows only"))
-      
-    tbl(eval(sym(con)), sql(paste("select * from", query))) |>
+    if (!is_null(head)) x <- paste(x, paste("fetch first", head, "rows only"))
+    
+    tbl(eval(sym(con)), sql(paste("select * from", x))) |>
       rename_with(~ str_to_lower(.)) |>
       mutate(across(everything(), ~ str_to_lower(.))) |> 
       collect()
