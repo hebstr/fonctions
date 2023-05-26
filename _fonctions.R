@@ -52,7 +52,7 @@ assign("opts", list(set = c(opts, p_format = p_format, p_seuil = p_seuil, lab, s
 
 #-------------------------------------------------------------------------------------------------------------
 
-opts_tab <- \(base, uv, vargrp = NULL, surv, strata = NULL, abb, abb_suppl = NULL, note,
+opts_tab <- \(base, uv, vargrp = NULL, surv, strata = NULL, abb = NULL, abb_suppl = NULL, note,
               var_suppl = NULL, vargrp_suppl = NULL, before = NULL) {
   
     add_vec <- \(to, var, before) {
