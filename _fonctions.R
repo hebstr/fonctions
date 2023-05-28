@@ -1,6 +1,3 @@
-
-#-------------------------------------------------------------------------------------------------------------
-
 opts_set <- \(suivi_an = 1, suivi_jr = suivi_an * 365,
               fdr = FALSE, fdr_start = 2014,
               fdr_suffix = "_fdr", output_suffix = "",
@@ -21,7 +18,7 @@ list(lab = list(sex_m = sex_m, sex_f = sex_f,
                 yes = yes, no = no, na = na))
 
 sep <- list(int = int_sep, out = out_sep, ci = ci_sep) %>% map(~ paste(., ""))
-if (is_true(sep_gap)) sep <- map(sep, ~ paste("", .))
+if (sep_gap) sep <- map(sep, ~ paste("", .))
 sep <- list(sep = sep)
 
 if (ci_lim == "[") { ci_low <- "[" ; ci_high <- "]" }
@@ -52,10 +49,10 @@ assign("opts", list(set = c(opts, p_format = p_format, p_seuil = p_seuil, lab, s
 
 #-------------------------------------------------------------------------------------------------------------
 
-opts_tab <- \(base, uv, vargrp = NULL, surv, strata = NULL, abb = NULL, abb_suppl = NULL, note,
-              var_suppl = NULL, vargrp_suppl = NULL, before = NULL) {
+opts_tab <- \(base, uv, var_suppl = NULL, vargrp = NULL, vargrp_suppl = NULL, before_var = NULL,
+              abb = NULL, abb_suppl = NULL, before_abb = NULL, surv, strata = NULL, note) {
   
-    add_vec <- \(to, var, before) {
+    add_vctr <- \(to, var, before) {
     
     x <- setdiff(c(to, var), var)
     append(x, var, after = match(before, x) - 1)
@@ -77,22 +74,21 @@ opts_tab <- \(base, uv, vargrp = NULL, surv, strata = NULL, abb = NULL, abb_supp
   
 abb <- enexpr(abb)
 abb_suppl <- enexpr(abb_suppl)
-with_abb <- expr(with(opts_abb, !!abb))
-with_abb_suppl <- expr(with(opts_abb, c(!!abb_suppl, !!abb)))
+before_abb <- enexpr(before_abb)
 
-if (is_false(opts$set$fdr))
+if (!opts$set$fdr)
 list(input = list(base = base, uv = uv),
      vargrp = group(vargrp),
      model_obj = model_obj(surv, strata),
-     abb = eval(with_abb),
+     abb = eval(expr(with(opts_abb, !!abb))),
      note = note)
 
 else
-list(input = (list(base = add_vec(to = base, var = c(var_suppl, vargrp_suppl), before = before),
-                   uv = add_vec(to = uv, var = c(var_suppl, vargrp_suppl), before = before))),
+list(input = (list(base = add_vctr(to = base, var = c(var_suppl, vargrp_suppl), before = before_var),
+                   uv = add_vctr(to = uv, var = c(var_suppl, vargrp_suppl), before = before_var))),
      vargrp = group(vargrp, vargrp_suppl),
      model_obj = model_obj(surv, strata),
-     abb = eval(with_abb_suppl),
+     abb = eval(expr(with(opts_abb, add_vctr(to = !!abb, var = !!abb_suppl, before = !!before_abb)))),
      note = note)
   
 }
@@ -103,7 +99,6 @@ abbr <- \(...) {
   
 e <- env("~" = \(x, y) paste0(enexpr(x), opts$set$sep$int, y))
 
-abb <-
 list(...) %>%
   map(~ eval(enexpr(.), e)) %>%
   setNames(str_extract(., "[:alnum:]+(?=)"))
@@ -124,11 +119,10 @@ c(...) %>%
 
 #----------------------------------------------------------------------------------------------------------------
 
-gt_template <- \(x, title, note_1 = NULL, ...) {
-
+gt_template <- \(x, slide = FALSE, ...) {
+  
 x <-
 as_gt(x) %>%
-  tab_header(md(title)) %>%
   opt_align_table_header(align = "left") %>%
   opt_table_font(font = opts$set$font$alpha) %>%
   tab_options(table.width = px(width),
@@ -169,18 +163,26 @@ as_gt(x) %>%
             locations = cells_body(columns = map(c("stat", "p.v", "estim"),
                                                  ~ grep(., names(x[[1]]))) %>% unlist))
 
-if(sum(grep("coef", names(x[[1]]))) >= 1)
-x %>%
-tab_footnote(c(eval(opts$tab$note$strata), .opts_note_mv, opts$tab$note$p,
-               str_abb(.ref, .estim, .estim_ajust, opts$abb$CI, opts$tab$abb))) %>%
-tab_footnote(opts$tab$note$ajust,
-             cells_column_labels(p.value_2))
+if (!slide) {
+  
+    x <- x %>% tab_header(md(title))
 
-else
-x %>% 
-tab_footnote(c(opts$tab$note$p, str_abb(.n, .SD, opts$tab$abb))) %>% 
-tab_footnote(opts$tab$note$vargrp,
-             cells_body(columns = label, rows = variable %in% opts$tab$vargrp$labels))
+    if (sum(grep("coef", names(x[[1]]))) >= 1)
+      
+    x %>%
+    tab_footnote(c(eval(opts$tab$note$strata), .opts_note_mv, opts$tab$note$p,
+                   str_abb(.ref, .estim, .estim_ajust, opts$abb$CI, opts$tab$abb))) %>%
+    tab_footnote(opts$tab$note$ajust,
+                 cells_column_labels(p.value_2))
+    
+    else
+      
+    x %>% 
+    tab_footnote(c(opts$tab$note$p, str_abb(.n, .SD, opts$tab$abb))) %>% 
+    tab_footnote(opts$tab$note$vargrp,
+                 cells_body(columns = label, rows = variable %in% opts$tab$vargrp$labels))
+
+    } else x
 
 }
 
@@ -233,13 +235,13 @@ if (is.data.frame(x)) {
 x <- x[c(opts$vargrp$surv, opts$tab$input$uv)]
 tbl_uvregression(x, y = !!expr(Surv(!!!syms(opts$vargrp$surv))),
                  exponentiate = exponentiate, pvalue_fun = pvalue_fun,
-                 show_single_row = -categorical(x, opts$tab$input$uv),
+                 show_single_row = -cat_nonbinr(x, opts$tab$input$uv),
                  hide_n = TRUE, ...)
 
 } else
   tbl_regression(x = opts$model$mv,
                  exponentiate = exponentiate, pvalue_fun = pvalue_fun,
-                 show_single_row = -categorical(ref, opts$tab$input$mv), ...)
+                 show_single_row = -cat_nonbinr(ref), ...)
 
 }
 
@@ -295,7 +297,7 @@ map(list(...), ~ paste0(., suffix)) %>% unlist
 
 #----------------------------------------------------------------------------------------------------------------
 
-categorical <- \(data, ...) {
+cat_nonbinr <- \(data, ...) {
   
 level <- c(...) %>% map_int(~ with(data, eval(sym(.))) %>% nlevels())
 c(...)[level > 2]
@@ -389,12 +391,25 @@ if (!is.null(opts$tab$vargrp)) x <-
 
 #---------------------------------------------------------------------------------------------------------------
 
+spec_label <- \(x, var, spec_label) {
+
+  x %>% modify_table_body(~ .x %>%
+          mutate(label = ifelse(variable == var,
+                                glue("{spec_label} — ref: {reference_level}"), label)))
+
+}
+
+#---------------------------------------------------------------------------------------------------------------
+
 output <- \(x, dir = "output", ...) {
 
 if(!webshot::is_phantomjs_installed()) webshot::install_phantomjs()
   
 y <- paste0(enexpr(x), opts$set$output_suffix)
+
 if (is.ggplot(x)) y <- paste0(y, "_", opts$set$suivi_an, "a")
+
+if (class(x)[1] == "gt_tbl" & is_null(x$`_heading`$title)) y <- paste0(y, "_slide") 
 
 path <- paste0(dir, "/", y)
 .html <- paste0(path, ".html")
@@ -406,6 +421,7 @@ message(paste0("~/", dir, "/", y, ".png", "\n"))
 if (str_detect(class(x)[1], "tbl")) {
     
     if (class(x)[1] != "gt_tbl") x <- as_gt(x)
+    
     gtsave(x, file = .html)
     browseURL(.html)
     webshot::webshot(.html, file = .png, vwidth = width + width*0.0625, vheight = 1, zoom = 3)
