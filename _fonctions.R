@@ -422,6 +422,18 @@ if (str_detect(class(x)[1], "tbl")) {
     
     if (class(x)[1] != "gt_tbl") x <- as_gt(x)
     
+    else {
+      
+        if (!str_detect(x$`_data`$var_label, "ref:")[1])
+        
+            print(x$`_data` %>%
+                    select(starts_with(c("variable", "test_name"))) %>%
+                    distinct())
+      
+        else print(glue("multivariable model:\n{.opts_note_mv}\n"))
+      
+    }
+    
     gtsave(x, file = .html)
     browseURL(.html)
     webshot::webshot(.html, file = .png, vwidth = width + width*0.0625, vheight = 1, zoom = 3)
